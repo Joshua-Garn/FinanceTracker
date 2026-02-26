@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom"
 import Sidebar from "./components/Sidebar"
 import DashboardPage from "./pages/DashboardPage"
 import TransactionsPage from "./pages/TransactionsPage"
+import BudgetPage from "./pages/BudgetPage"
 
 function App() {
   return (
@@ -10,6 +11,7 @@ function App() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
+        <Route path="/budget" element={<BudgetPage />} />
       </Routes>
     </div>
   )
