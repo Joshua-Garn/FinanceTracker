@@ -5,6 +5,7 @@ import TransactionsPage from "./pages/TransactionsPage"
 import BudgetPage from "./pages/BudgetPage"
 import GoalsPage from "./pages/GoalsPage"
 import SettingsPage from "./pages/SettingsPage"
+import AnalysisPage from "./pages/AnalysisPage"
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/budget" element={<BudgetPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/analysis" element={<AnalysisPage />} />
       </Routes>
     </div>
   )
