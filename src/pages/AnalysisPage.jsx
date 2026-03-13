@@ -1,66 +1,6 @@
 import { useState } from "react"
-
-const snapshotCards = [
-  {
-    icon: "📉",
-    title: "Spending vs Last Month",
-    value: "-12%",
-    positive: true,
-    comparison: "You spent less than January.",
-  },
-  {
-    icon: "💰",
-    title: "Savings Rate",
-    value: "24%",
-    positive: true,
-    comparison: "Up from 18% last month.",
-  },
-  {
-    icon: "📈",
-    title: "Income Trend",
-    value: "+$320",
-    positive: true,
-    comparison: "Freelance income growing.",
-  },
-  {
-    icon: "🎯",
-    title: "Goal Progress",
-    value: "3 of 5",
-    positive: true,
-    comparison: "Goals on track this month.",
-  },
-]
-
-const insights = [
-  {
-    type: "positive",
-    icon: "🟢",
-    title: "Your savings rate improved",
-    body: "You saved 24% of your income this month — up from 18% in January. Small, consistent changes are making a real difference.",
-    action: "View savings breakdown",
-  },
-  {
-    type: "optimization",
-    icon: "🟡",
-    title: "Dining expenses are creeping up",
-    body: "You've spent $95 on dining out so far, which is trending 30% higher than last month. Consider setting a weekly dining limit to stay on track.",
-    action: "Review dining transactions",
-  },
-  {
-    type: "caution",
-    icon: "🔴",
-    title: "Entertainment budget exceeded",
-    body: "You're $30 over your entertainment budget this month. It's not a big gap — a small adjustment next week should bring things back in line.",
-    action: null,
-  },
-  {
-    type: "positive",
-    icon: "🟢",
-    title: "Car goal is fully funded",
-    body: "Congratulations! You've reached your $15,000 car savings goal. Consider redirecting that monthly contribution toward your next priority.",
-    action: "Manage goals",
-  },
-]
+import { useAnalysis } from "../hooks/useAnalysis"
+import { generateInsights, askAI } from "../services/analysisService"
 
 const suggestedPrompts = [
   "Can I afford a $500 purchase?",
@@ -81,6 +21,19 @@ function getInsightAccent(type) {
   }
 }
 
+function getInsightIcon(type) {
+  switch (type) {
+    case "positive":
+      return "🟢"
+    case "optimization":
+      return "🟡"
+    case "caution":
+      return "🔴"
+    default:
+      return "💡"
+  }
+}
+
 function getActionColor(type) {
   switch (type) {
     case "positive":
@@ -94,20 +47,24 @@ function getActionColor(type) {
   }
 }
 
-function SnapshotCard({ icon, title, value, comparison }) {
+function SnapshotCard({ icon, title, value, loading }) {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col gap-2 hover:shadow-md transition-shadow">
       <div className="flex items-center gap-2">
         <span className="text-lg">{icon}</span>
         <span className="text-xs font-medium text-slate-500">{title}</span>
       </div>
-      <p className="text-xl font-bold text-slate-900">{value}</p>
-      <p className="text-xs text-slate-400">{comparison}</p>
+      {loading ? (
+        <div className="h-7 w-16 bg-slate-100 rounded animate-pulse" />
+      ) : (
+        <p className="text-xl font-bold text-slate-900">{value || "—"}</p>
+      )}
     </div>
   )
 }
 
-function InsightCard({ type, icon, title, body, action }) {
+function InsightCard({ type, title, body, action }) {
+  const icon = getInsightIcon(type)
   return (
     <div
       className={`rounded-2xl border p-5 shadow-sm transition-all hover:shadow-md ${getInsightAccent(type)}`}
@@ -131,34 +88,110 @@ function InsightCard({ type, icon, title, body, action }) {
 }
 
 export default function AnalysisPage() {
+  const { analysis, loading: analysisLoading } = useAnalysis()
   const [query, setQuery] = useState("")
   const [response, setResponse] = useState(null)
+  const [generating, setGenerating] = useState(false)
+  const [asking, setAsking] = useState(false)
+  const [error, setError] = useState(null)
 
-  function handleAsk() {
-    if (!query.trim()) return
-    setResponse(
-      `Based on your recent activity, here's what I found: Your spending in "${query.trim()}" related categories has been stable. You're in good shape — keep it up!`
-    )
-    setQuery("")
+  const summary = analysis?.summary || {}
+  const insights = analysis?.insights || []
+  const lastGenerated = analysis?.generatedAt
+    ? new Date(analysis.generatedAt).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null
+
+  async function handleGenerate() {
+    setGenerating(true)
+    setError(null)
+    try {
+      await generateInsights()
+    } catch (err) {
+      console.error("Failed to generate insights:", err)
+      setError(err.message || "Failed to generate insights. Make sure the Functions emulator is running.")
+    } finally {
+      setGenerating(false)
+    }
   }
+
+  async function handleAsk() {
+    if (!query.trim() || asking) return
+    setAsking(true)
+    try {
+      const result = await askAI(query.trim())
+      setResponse(result.answer)
+      setQuery("")
+    } catch (err) {
+      console.error("Failed to ask AI:", err)
+      setResponse("Sorry, I couldn't process your question. Please try again.")
+    } finally {
+      setAsking(false)
+    }
+  }
+
+  const snapshotCards = [
+    {
+      icon: "📉",
+      title: "Spending vs Last Month",
+      value: summary.spendingVsLastMonth,
+    },
+    {
+      icon: "💰",
+      title: "Savings Rate",
+      value: summary.savingsRate,
+    },
+    {
+      icon: "📈",
+      title: "Income Trend",
+      value: summary.incomeTrend,
+    },
+    {
+      icon: "🎯",
+      title: "Goal Progress",
+      value: summary.goalProgress,
+    },
+  ]
 
   return (
     <main className="flex-1 flex flex-col min-w-0 p-8 overflow-hidden">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900">Analysis</h2>
-        <p className="text-sm text-slate-500 mt-1 font-medium">
-          Smart insights based on your financial activity.
-        </p>
-        <p className="text-xs text-slate-400 mt-0.5">Based on February activity.</p>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900">Analysis</h2>
+          <p className="text-sm text-slate-500 mt-1 font-medium">
+            AI-powered insights based on your financial activity.
+          </p>
+          {lastGenerated && (
+            <p className="text-xs text-slate-400 mt-0.5">Last updated: {lastGenerated}</p>
+          )}
+        </div>
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-all cursor-pointer shadow-sm hover:shadow"
+        >
+          {generating ? "Generating..." : "✨ Generate Insights"}
+        </button>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto space-y-6 pr-1">
         {/* Section 1: Snapshot Summary */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {snapshotCards.map((card) => (
-            <SnapshotCard key={card.title} {...card} />
+            <SnapshotCard key={card.title} {...card} loading={analysisLoading || generating} />
           ))}
         </div>
 
@@ -167,11 +200,35 @@ export default function AnalysisPage() {
           <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
             AI Insights
           </h3>
-          <div className="space-y-4">
-            {insights.map((insight, i) => (
-              <InsightCard key={i} {...insight} />
-            ))}
-          </div>
+          {analysisLoading || generating ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="w-6 h-6 bg-slate-100 rounded-full animate-pulse" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-48 bg-slate-100 rounded animate-pulse" />
+                      <div className="h-3 w-full bg-slate-100 rounded animate-pulse" />
+                      <div className="h-3 w-3/4 bg-slate-100 rounded animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : insights.length > 0 ? (
+            <div className="space-y-4">
+              {insights.map((insight, i) => (
+                <InsightCard key={i} {...insight} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 p-8 text-center">
+              <p className="text-sm text-slate-500">No insights yet.</p>
+              <p className="text-xs text-slate-400 mt-1">
+                Click "Generate Insights" to get AI-powered analysis of your finances.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Section 3: Ask AI */}
@@ -186,13 +243,15 @@ export default function AnalysisPage() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAsk()}
               placeholder="Ask about your spending…"
-              className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all"
+              disabled={asking}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all disabled:opacity-60"
             />
             <button
               onClick={handleAsk}
-              className="bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-all cursor-pointer"
+              disabled={asking || !query.trim()}
+              className="bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] disabled:opacity-60 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-all cursor-pointer"
             >
-              Send
+              {asking ? "..." : "Send"}
             </button>
           </div>
 
@@ -202,7 +261,8 @@ export default function AnalysisPage() {
               <button
                 key={prompt}
                 onClick={() => setQuery(prompt)}
-                className="text-xs text-slate-400 hover:text-emerald-600 bg-slate-50 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+                disabled={asking}
+                className="text-xs text-slate-400 hover:text-emerald-600 bg-slate-50 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-60"
               >
                 {prompt}
               </button>
